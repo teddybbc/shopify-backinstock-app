@@ -52,6 +52,11 @@ const SHOP_CONFIGS: Record<
     domainEnv: "SHOP_46777794714_DOMAIN",
     tokenEnv: "SHOP_46777794714_ADMIN_TOKEN",
   },
+  // BC TEST
+  "59668267140": {
+    domainEnv: "SHOP_59668267140_DOMAIN",
+    tokenEnv: "SHOP_59668267140_ADMIN_TOKEN",
+  },
   // dev02 Bloom Connect
   "66638577877": {
     domainEnv: "SHOP_66638577877_DOMAIN",
