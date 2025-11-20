@@ -1,0 +1,22 @@
+client_id = "0fd87fb4688c3777b564b0d55c2fba16"
+name = "backinstock"
+application_url = "https://example.com"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+include_config_on_deploy = true
+
+[webhooks]
+api_version = "2024-10"
+
+[access_scopes]
+scopes = "read_products,write_products,read_inventory,write_inventory,read_customers,read_companies,write_app_proxy"
+
+[auth]
+redirect_urls = [ "https://example.com/api/auth" ]
+
+[app_proxy]
+url = "/api/backinstock/register"
+prefix = "apps"
+subpath = "backinstock"

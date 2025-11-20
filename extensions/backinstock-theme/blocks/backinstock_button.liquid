@@ -1,0 +1,16 @@
+{% if product %}
+  {% assign selected_variant = product.selected_or_first_available_variant %}
+  {% if selected_variant %}
+    {% render 'backinstock', variant: selected_variant %}
+  {% endif %}
+{% endif %}
+
+{% schema %}
+{
+  "name": "Back in stock button",
+  "target": "section",
+  "templates": [
+    "product"
+  ]
+}
+{% endschema %}

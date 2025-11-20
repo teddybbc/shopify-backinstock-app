@@ -1,0 +1,91 @@
+{% liquid
+  assign is_design_mode = request.design_mode
+
+  assign current_variant = variant
+  if current_variant == blank and product and product.selected_or_first_available_variant
+    assign current_variant = product.selected_or_first_available_variant
+  endif
+
+  assign variant_inventory = 0
+  if current_variant and current_variant.inventory_quantity != blank
+    assign variant_inventory = current_variant.inventory_quantity | plus: 0
+  endif
+
+  assign company_id = ""
+  if customer and customer.current_company and customer.current_company.id
+    assign company_id = customer.current_company.id
+  endif
+
+  assign button_id = ""
+  if current_variant
+    assign button_id = current_variant.id | replace: "gid://shopify/ProductVariant/", "" | prepend: "notifyBtn-"
+  endif
+
+  assign show_button = false
+  if company_id != "" and current_variant and variant_inventory <= 0
+    assign show_button = true
+  endif
+%}
+
+{% if is_design_mode %}
+  <div class="backinstock-preview">
+    Back in Stock button will appear for B2B customers when the selected variant has zero inventory.
+  </div>
+{% endif %}
+
+{% if show_button %}
+  <button style="padding:6px 14px;color:#ffffff;background:#F8A746;border-radius:20px;border:#F8A746;" id="{{ button_id }}">Notify me when available</button>
+  <script>
+    (function () {
+      const btn = document.getElementById("{{ button_id }}");
+      if (!btn) return;
+
+      const proxyUrl = "/apps/backinstock";
+      console.log("Backinstock proxy URL:", proxyUrl);
+
+      // Use the numeric variant ID from Liquid
+      const bodyBase = {
+        variantId: "{{ current_variant.id }}",  // e.g. "44763933573333"
+        companyId: "{{ company_id }}"
+      };
+      console.log("Backinstock base body (Liquid) - v1:", bodyBase);
+
+      btn.addEventListener("click", async () => {
+        const body = {
+          variantId: "{{ current_variant.id }}",
+          companyId: "{{ company_id }}"
+        };
+
+        console.log("Backinstock request body:", body);
+
+        try {
+          const res = await fetch(proxyUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+
+          const text = await res.text();
+          console.log("Backinstock raw response:", res.status, text);
+
+          if (!res.ok) {
+            console.error(
+              "Backinstock registration failed. Status",
+              res.status,
+              "Body:",
+              text
+            );
+            alert("We could not save your request. Please try again.");
+            return;
+          }
+
+          alert("Your company will be notified once this product is back in stock.");
+        } catch (error) {
+          console.error("Backinstock registration failed", error);
+          alert("We could not save your request. Please try again.");
+        }
+      });
+    })();
+  </script>
+{% endif %}
+
