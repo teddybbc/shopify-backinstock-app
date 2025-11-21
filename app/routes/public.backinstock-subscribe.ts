@@ -1,8 +1,26 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 
-// This route is ONLY for bloomconnecttest
-// Numeric shop ID = 59668267140 (you already used this)
-// We read its domain & token from env
+// ===== CORS CONFIG =====
+const ALLOWED_ORIGINS = [
+  "https://shopify.dreampim.com",
+  "https://bloomconnecttest.myshopify.com",
+];
+
+function corsHeaders(origin: string | null) {
+  const allowedOrigin =
+    origin && ALLOWED_ORIGINS.includes(origin)
+      ? origin
+      : ALLOWED_ORIGINS[0]; // default to first
+
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+}
+
+// ===== SHOP CONFIG (same as before) =====
+
 type ShopAdminConfig = {
   shopDomain: string;
   adminAccessToken: string;
@@ -68,10 +86,28 @@ async function adminGraphql(
   return json;
 }
 
-// POST: subscribe current company to a variant
+// ===== ACTION: subscribe company to variant =====
+
 export async function action({ request }: ActionFunctionArgs) {
+  const origin = request.headers.get("Origin");
+  const baseHeaders = corsHeaders(origin);
+
+  // Handle CORS preflight
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: baseHeaders });
+  }
+
   if (request.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return new Response(
+      JSON.stringify({ ok: false, error: "Method not allowed" }),
+      {
+        status: 405,
+        headers: {
+          ...baseHeaders,
+          "Content-Type": "application/json",
+        },
+      },
+    );
   }
 
   const formData = await request.formData();
@@ -79,9 +115,19 @@ export async function action({ request }: ActionFunctionArgs) {
   const companyId = formData.get("company_id")?.toString() || "";
 
   if (!variantIdRaw || !companyId) {
-    return new Response("Missing variant_id or company_id", {
-      status: 400,
-    });
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error: "Missing variant_id or company_id",
+      }),
+      {
+        status: 400,
+        headers: {
+          ...baseHeaders,
+          "Content-Type": "application/json",
+        },
+      },
+    );
   }
 
   // Liquid gives numeric variant ID → build Admin GID
@@ -92,7 +138,16 @@ export async function action({ request }: ActionFunctionArgs) {
     shopCfg = getBloomConnectTestConfig();
   } catch (err: any) {
     console.error("Backinstock subscribe: config error", err);
-    return new Response("Server misconfigured", { status: 500 });
+    return new Response(
+      JSON.stringify({ ok: false, error: "Server misconfigured" }),
+      {
+        status: 500,
+        headers: {
+          ...baseHeaders,
+          "Content-Type": "application/json",
+        },
+      },
+    );
   }
 
   try {
@@ -170,38 +225,56 @@ export async function action({ request }: ActionFunctionArgs) {
 
     const userErrors =
       writeJson?.data?.metafieldsSet?.userErrors ?? [];
+
     if (userErrors.length > 0) {
       console.error(
         "Backinstock subscribe: metafieldsSet userErrors",
         userErrors,
       );
-      return new Response("Failed to save subscription", {
-        status: 500,
-      });
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Failed to save subscription",
+          userErrors,
+        }),
+        {
+          status: 500,
+          headers: {
+            ...baseHeaders,
+            "Content-Type": "application/json",
+          },
+        },
+      );
     }
 
-    // Simple thank-you HTML so it works when posting normally
-    const html = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="utf-8" />
-        <title>Subscribed</title>
-      </head>
-      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
-        <p>✅ You’ll be notified when this product is back in stock.</p>
-        <p><a href="javascript:history.back()">← Back to product</a></p>
-      </body>
-      </html>
-    `;
-
-    return new Response(html, {
-      status: 200,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-    });
+    // ✅ JSON response for your modal JavaScript
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        message: "You’ll be notified when this product is back in stock.",
+        variantId: variantGid,
+        companies,
+      }),
+      {
+        status: 200,
+        headers: {
+          ...baseHeaders,
+          "Content-Type": "application/json",
+        },
+      },
+    );
   } catch (err) {
     console.error("Backinstock subscribe: unexpected error", err);
-    return new Response("Internal error", { status: 500 });
+    return new Response(
+      JSON.stringify({ ok: false, error: "Internal error" }),
+      {
+        status: 500,
+        headers: {
+          ...baseHeaders,
+          "Content-Type": "application/json",
+        },
+      },
+    );
   }
 }
 
@@ -214,7 +287,9 @@ export function loader({}: LoaderFunctionArgs) {
     }),
     {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
     },
   );
 }
