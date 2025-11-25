@@ -1,16 +1,87 @@
+// app/routes/public.backinstock-subscribe.ts
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 
-// ===== CORS CONFIG =====
-const ALLOWED_ORIGINS = [
-  "https://shopify.dreampim.com",
-  "https://bloomconnecttest.myshopify.com",
-];
+// ==============================
+// CORS + SHOP CONFIG
+// ==============================
+
+type ShopEnvConfig = {
+  domainEnv: string;
+  tokenEnv: string;
+};
+
+type ShopAdminConfig = {
+  shopDomain: string;
+  adminAccessToken: string;
+};
+
+/**
+ * Map frontend Origins → env var keys for domain + admin token.
+ *
+ * Add more origins here as you roll out to more countries / custom domains.
+ */
+const ORIGIN_TO_ENV: Record<string, ShopEnvConfig> = {
+  // BC TEST (bloomconnecttest) — two domains pointing to same shop
+  "https://shopify.dreampim.com": {
+    domainEnv: "SHOP_59668267140_DOMAIN",
+    tokenEnv: "SHOP_59668267140_ADMIN_TOKEN",
+  },
+  "https://bloomconnecttest.myshopify.com": {
+    domainEnv: "SHOP_59668267140_DOMAIN",
+    tokenEnv: "SHOP_59668267140_ADMIN_TOKEN",
+  },
+
+  // NZ
+  "https://bloomconnectnz.myshopify.com": {
+    domainEnv: "SHOP_42102259871_DOMAIN",
+    tokenEnv: "SHOP_42102259871_ADMIN_TOKEN",
+  },
+
+  // AU
+  "https://bloomconnect.myshopify.com": {
+    domainEnv: "SHOP_35012608137_DOMAIN",
+    tokenEnv: "SHOP_35012608137_ADMIN_TOKEN",
+  },
+
+  // SG
+  "https://bloom-connect-sg.myshopify.com": {
+    domainEnv: "SHOP_44068798624_DOMAIN",
+    tokenEnv: "SHOP_44068798624_ADMIN_TOKEN",
+  },
+
+  // HK
+  "https://bloomconnecthk.myshopify.com": {
+    domainEnv: "SHOP_49541087392_DOMAIN",
+    tokenEnv: "SHOP_49541087392_ADMIN_TOKEN",
+  },
+
+  // MY
+  "https://bloomconnectmy.myshopify.com": {
+    domainEnv: "SHOP_48475504790_DOMAIN",
+    tokenEnv: "SHOP_48475504790_ADMIN_TOKEN",
+  },
+
+  // ID
+  "https://bloomconnectid.myshopify.com": {
+    domainEnv: "SHOP_46777794714_DOMAIN",
+    tokenEnv: "SHOP_46777794714_ADMIN_TOKEN",
+  },
+
+  // dev02 (if you ever use this route from dev02 storefront)
+  "https://dev02-bloom-connect.myshopify.com": {
+    domainEnv: "SHOP_66638577877_DOMAIN",
+    tokenEnv: "SHOP_66638577877_ADMIN_TOKEN",
+  },
+};
+
+// Allowed origins = keys of ORIGIN_TO_ENV
+const ALLOWED_ORIGINS = Object.keys(ORIGIN_TO_ENV);
 
 function corsHeaders(origin: string | null) {
   const allowedOrigin =
     origin && ALLOWED_ORIGINS.includes(origin)
       ? origin
-      : ALLOWED_ORIGINS[0]; // default to first
+      : ALLOWED_ORIGINS[0]; // default to first known origin
 
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
@@ -19,20 +90,26 @@ function corsHeaders(origin: string | null) {
   };
 }
 
-// ===== SHOP CONFIG (same as before) =====
+/**
+ * Given an Origin header, resolve which shop we should talk to.
+ * Uses env vars like SHOP_59668267140_DOMAIN / _ADMIN_TOKEN, etc.
+ */
+function getShopConfigFromOrigin(origin: string | null): ShopAdminConfig {
+  if (!origin) {
+    throw new Error("Missing Origin header on request");
+  }
 
-type ShopAdminConfig = {
-  shopDomain: string;
-  adminAccessToken: string;
-};
+  const envCfg = ORIGIN_TO_ENV[origin];
+  if (!envCfg) {
+    throw new Error(`Origin not allowed or not mapped: ${origin}`);
+  }
 
-function getBloomConnectTestConfig(): ShopAdminConfig {
-  const shopDomain = process.env.SHOP_59668267140_DOMAIN;
-  const adminAccessToken = process.env.SHOP_59668267140_ADMIN_TOKEN;
+  const shopDomain = process.env[envCfg.domainEnv];
+  const adminAccessToken = process.env[envCfg.tokenEnv];
 
   if (!shopDomain || !adminAccessToken) {
     throw new Error(
-      "Missing SHOP_59668267140_DOMAIN or SHOP_59668267140_ADMIN_TOKEN env vars",
+      `Missing env vars for origin ${origin}: ${envCfg.domainEnv} or ${envCfg.tokenEnv}`,
     );
   }
 
@@ -41,6 +118,10 @@ function getBloomConnectTestConfig(): ShopAdminConfig {
     adminAccessToken,
   };
 }
+
+// ==============================
+// Admin GraphQL helper
+// ==============================
 
 async function adminGraphql(
   shopCfg: ShopAdminConfig,
@@ -86,7 +167,9 @@ async function adminGraphql(
   return json;
 }
 
-// ===== ACTION: subscribe company to variant =====
+// ==============================
+// ACTION: subscribe company to variant
+// ==============================
 
 export async function action({ request }: ActionFunctionArgs) {
   const origin = request.headers.get("Origin");
@@ -135,11 +218,14 @@ export async function action({ request }: ActionFunctionArgs) {
 
   let shopCfg: ShopAdminConfig;
   try {
-    shopCfg = getBloomConnectTestConfig();
+    shopCfg = getShopConfigFromOrigin(origin);
   } catch (err: any) {
     console.error("Backinstock subscribe: config error", err);
     return new Response(
-      JSON.stringify({ ok: false, error: "Server misconfigured" }),
+      JSON.stringify({
+        ok: false,
+        error: "Server misconfigured or origin not allowed",
+      }),
       {
         status: 500,
         headers: {
