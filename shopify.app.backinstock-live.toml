@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "1996d6cbcea5e0a4eaee4e1c11024a08"
-name = "backinstock-live"
+name = "Backinstock"
 application_url = "https://king-prawn-app-l7ked.ondigitalocean.app"
 embedded = true
 
