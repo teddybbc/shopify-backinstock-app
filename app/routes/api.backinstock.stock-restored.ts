@@ -479,8 +479,9 @@ export async function action({ request }: ActionFunctionArgs) {
 
   console.log("Backinstock Flow: posting payload to OpenCart:", ocPayload);
 
-  const ocUrl =
-    "https://dreampim.com/index.php?route=cronjob/backinstock/sendEmail";
+  //const ocUrl ="https://dreampim.com/index.php?route=cronjob/backinstock/sendEmail";
+
+  const ocUrl ="https://sellerapp.bloomandgrowgroup.com/api/backinstock/sendEmail";
 
   const payloadToOC = {
     ...ocPayload,
