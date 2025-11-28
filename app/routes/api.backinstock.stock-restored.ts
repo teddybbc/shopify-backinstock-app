@@ -20,86 +20,56 @@ const ADMIN_API_VERSION = "2025-07";
 // Map numeric shopId -> env keys (domain + admin token)
 const SHOP_CONFIGS: Record<
   string,
-  { domainEnv: string; tokenEnv: string }
+  { domainEnv: string; tokenEnv: string; domainUrl: string }
 > = {
   // NZ
   "42102259871": {
     domainEnv: "SHOP_42102259871_DOMAIN",
     tokenEnv: "SHOP_42102259871_ADMIN_TOKEN",
+    domainUrl: "bloomconnect.co.nz",
   },
   // AU
   "35012608137": {
     domainEnv: "SHOP_35012608137_DOMAIN",
     tokenEnv: "SHOP_35012608137_ADMIN_TOKEN",
+    domainUrl: "bloomconnect.com.au",
   },
   // SG
   "44068798624": {
     domainEnv: "SHOP_44068798624_DOMAIN",
     tokenEnv: "SHOP_44068798624_ADMIN_TOKEN",
+    domainUrl: "bloomconnect.com.sg",
   },
   // HK
   "49541087392": {
     domainEnv: "SHOP_49541087392_DOMAIN",
     tokenEnv: "SHOP_49541087392_ADMIN_TOKEN",
+    domainUrl: "bloomconnect.com.hk",
   },
   // MY
   "48475504790": {
     domainEnv: "SHOP_48475504790_DOMAIN",
     tokenEnv: "SHOP_48475504790_ADMIN_TOKEN",
+    domainUrl: "bloomconnect.com.my",
   },
+  
   // ID
   "46777794714": {
     domainEnv: "SHOP_46777794714_DOMAIN",
     tokenEnv: "SHOP_46777794714_ADMIN_TOKEN",
+    domainUrl: "bloomconnect.co.id",
   },
   // BC TEST
   "59668267140": {
     domainEnv: "SHOP_59668267140_DOMAIN",
     tokenEnv: "SHOP_59668267140_ADMIN_TOKEN",
+    domainUrl: "shopify.dreampim.com",
   },
   // dev02 Bloom Connect
   "66638577877": {
     domainEnv: "SHOP_66638577877_DOMAIN",
     tokenEnv: "SHOP_66638577877_ADMIN_TOKEN",
-  },
-};
-
-
-const SHOP_URL: Record<
-  string,
-  { domainUrl: string; }
-> = {
-  // NZ
-  "42102259871": {
-    domainUrl: "bloomconnect.co.nz",
-  },
-  // AU
-  "35012608137": {
-     domainUrl: "bloomconnect.com.au",
-  },
-  // SG
-  "44068798624": {
-     domainUrl: "bloomconnect.com.sg",
-  },
-  // HK
-  "49541087392": {
-     domainUrl: "bloomconnect.com.hk",
-  },
-  // MY
-  "48475504790": {
-     domainUrl: "bloomconnect.com.my",
-  },
-  // ID
-  "46777794714": {
-     domainUrl: "bloomconnect.co.id",
-  },
-  // BC TEST
-  "59668267140": {
-     domainUrl: "shopify.dreampim.com/",
-  },
-  // dev02 Bloom Connect
-  "66638577877": {
-     domainUrl: "dev02-bloom-connect.myshopify.com/",
+    domainUrl: "dev02-bloom-connect.myshopify.com",
   },
 };
 
@@ -505,8 +475,8 @@ export async function action({ request }: ActionFunctionArgs) {
   // 9) Build payload for OpenCart
   const handle = variantNode.product?.handle ?? "";
   const productUrl = handle
-    ? `https://${SHOP_URL[shopId].domainUrl}/products/${handle}`
-    : `https://${SHOP_URL[shopId].domainUrl}/products/${productNumericId}`;
+    ? `https://${SHOP_CONFIGS[shopId].domainUrl}/products/${handle}`
+    : `https://${SHOP_CONFIGS[shopId].domainUrl}/products/${productNumericId}`;
 
   const ocPayload = {
     product_id: productNumericId,
