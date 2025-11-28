@@ -17,66 +17,97 @@ import {
 
 const ADMIN_API_VERSION = "2025-07";
 
-// Map numeric shopId -> env keys (domain + admin token + public storefront base URL)
+// Map numeric shopId -> env keys (domain + admin token)
 const SHOP_CONFIGS: Record<
   string,
-  { domainEnv: string; tokenEnv: string; shopBaseUrl: string }
+  { domainEnv: string; tokenEnv: string }
 > = {
   // NZ
   "42102259871": {
     domainEnv: "SHOP_42102259871_DOMAIN",
     tokenEnv: "SHOP_42102259871_ADMIN_TOKEN",
-    shopBaseUrl: "bloomconnect.co.nz",
   },
   // AU
   "35012608137": {
     domainEnv: "SHOP_35012608137_DOMAIN",
     tokenEnv: "SHOP_35012608137_ADMIN_TOKEN",
-    shopBaseUrl: "bloomconnect.com.au",
   },
   // SG
   "44068798624": {
     domainEnv: "SHOP_44068798624_DOMAIN",
     tokenEnv: "SHOP_44068798624_ADMIN_TOKEN",
-    shopBaseUrl: "bloomconnect.com.sg",
   },
-  // HK  👈 removed stray leading slash
+  // HK
   "49541087392": {
     domainEnv: "SHOP_49541087392_DOMAIN",
     tokenEnv: "SHOP_49541087392_ADMIN_TOKEN",
-    shopBaseUrl: "bloomconnect.com.hk",
   },
   // MY
   "48475504790": {
     domainEnv: "SHOP_48475504790_DOMAIN",
     tokenEnv: "SHOP_48475504790_ADMIN_TOKEN",
-    shopBaseUrl: "bloomconnect.com.my",
   },
   // ID
   "46777794714": {
     domainEnv: "SHOP_46777794714_DOMAIN",
     tokenEnv: "SHOP_46777794714_ADMIN_TOKEN",
-    shopBaseUrl: "bloomconnect.co.id",
   },
   // BC TEST
   "59668267140": {
     domainEnv: "SHOP_59668267140_DOMAIN",
     tokenEnv: "SHOP_59668267140_ADMIN_TOKEN",
-    shopBaseUrl: "shopify.dreampim.com",
   },
   // dev02 Bloom Connect
   "66638577877": {
     domainEnv: "SHOP_66638577877_DOMAIN",
     tokenEnv: "SHOP_66638577877_ADMIN_TOKEN",
-    shopBaseUrl: "dev02-bloom-connect.myshopify.com",
   },
 };
 
+
+const SHOP_URL: Record<
+  string,
+  { domainUrl: string; }
+> = {
+  // NZ
+  "42102259871": {
+    domainUrl: "bloomconnect.co.nz",
+  },
+  // AU
+  "35012608137": {
+     domainUrl: "bloomconnect.com.au",
+  },
+  // SG
+  "44068798624": {
+     domainUrl: "bloomconnect.com.sg",
+  },
+  // HK
+  "49541087392": {
+     domainUrl: "bloomconnect.com.hk",
+  },
+  // MY
+  "48475504790": {
+     domainUrl: "bloomconnect.com.my",
+  },
+  // ID
+  "46777794714": {
+     domainUrl: "bloomconnect.co.id",
+  },
+  // BC TEST
+  "59668267140": {
+     domainUrl: "shopify.dreampim.com/",
+  },
+  // dev02 Bloom Connect
+  "66638577877": {
+     domainUrl: "dev02-bloom-connect.myshopify.com/",
+  },
+};
+
+
 type ShopAdminConfig = {
   shopId: string;
-  shopDomain: string; // myshopify domain from env
+  shopDomain: string;
   adminAccessToken: string;
-  shopBaseUrl: string; // public storefront base URL (bloomconnect.com.xx)
 };
 
 function getShopAdminConfig(shopId: string): ShopAdminConfig {
@@ -90,7 +121,6 @@ function getShopAdminConfig(shopId: string): ShopAdminConfig {
 
   const shopDomain = process.env[cfg.domainEnv];
   const adminAccessToken = process.env[cfg.tokenEnv];
-  const shopBaseUrl = cfg.shopBaseUrl;
 
   console.log(
     "getShopAdminConfig: domainEnv:",
@@ -104,7 +134,6 @@ function getShopAdminConfig(shopId: string): ShopAdminConfig {
     "isSet:",
     !!adminAccessToken,
   );
-  console.log("getShopAdminConfig: shopBaseUrl:", shopBaseUrl);
 
   if (!shopDomain || !adminAccessToken) {
     throw new Error(
@@ -112,17 +141,10 @@ function getShopAdminConfig(shopId: string): ShopAdminConfig {
     );
   }
 
-  if (!shopBaseUrl) {
-    throw new Error(
-      `Missing shopBaseUrl in SHOP_CONFIGS for shopId: ${shopId}`,
-    );
-  }
-
   return {
     shopId,
     shopDomain,
     adminAccessToken,
-    shopBaseUrl,
   };
 }
 
@@ -264,8 +286,6 @@ export async function action({ request }: ActionFunctionArgs) {
       normalizedShopId,
       "domain",
       shopCfg.shopDomain,
-      "baseUrl",
-      shopCfg.shopBaseUrl,
     );
   } catch (err) {
     console.error("Backinstock Flow: getShopAdminConfig failed:", err);
@@ -482,19 +502,11 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
-  // 9) Build payload for Laravel
+  // 9) Build payload for OpenCart
   const handle = variantNode.product?.handle ?? "";
-
-  // Normalize shopBaseUrl → strip protocol, leading/trailing slashes
-  const baseHost = shopCfg.shopBaseUrl
-    .trim()
-    .replace(/^https?:\/\//, "")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
-
   const productUrl = handle
-    ? `https://${baseHost}/products/${handle}`
-    : `https://${baseHost}/products/${productNumericId}`;
+    ? `https://${SHOP_URL[shopId].domainUrl}/products/${handle}`
+    : `https://${SHOP_URL[shopId].domainUrl}/products/${productNumericId}`;
 
   const ocPayload = {
     product_id: productNumericId,
@@ -505,17 +517,18 @@ export async function action({ request }: ActionFunctionArgs) {
     subscribers: recipients.map((r) => r.email),
   };
 
-  console.log("Backinstock Flow: posting payload to Laravel:", ocPayload);
+  console.log("Backinstock Flow: posting payload to OpenCart:", ocPayload);
 
-  const ocUrl =
-    "https://sellerapp.bloomandgrowgroup.com/api/backinstock/sendemail";
+  //const ocUrl ="https://dreampim.com/index.php?route=cronjob/backinstock/sendEmail";
+
+  const ocUrl ="https://sellerapp.bloomandgrowgroup.com/api/backinstock/sendEmail";
 
   const payloadToOC = {
     ...ocPayload,
-    flowSecretHeader, // For secret validation on the Laravel side
+    flowSecretHeader, // For PHP secret validation
   };
 
-  console.log("Backinstock Flow: posting to Laravel payload:", payloadToOC);
+  console.log("Backinstock Flow: posting to OpenCart payload:", payloadToOC);
 
   let ocJson: any = null;
 
@@ -535,13 +548,19 @@ export async function action({ request }: ActionFunctionArgs) {
       ocJson = { raw: text };
     }
 
-    console.log("Laravel backinstock response:", ocJson);
+    console.log("OpenCart response:", ocJson);
+
+    if (ocJson?.secret_valid === true) {
+      console.log("Backinstock Flow: OpenCart SECRET OK");
+    } else {
+      console.log("Backinstock Flow: OpenCart SECRET INVALID");
+    }
 
     if (!ocResp.ok) {
       return json(
         {
           ok: false,
-          error: "Backinstock sendEmail failed",
+          error: "OpenCart sendEmail failed",
           status: ocResp.status,
           ocResponse: ocJson,
         },
@@ -549,9 +568,9 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
   } catch (err) {
-    console.error("Backinstock Flow: error calling Laravel sendEmail:", err);
+    console.error("Backinstock Flow: error calling OpenCart sendEmail:", err);
     return json(
-      { ok: false, error: "Error calling Laravel sendEmail" },
+      { ok: false, error: "Error calling OpenCart sendEmail" },
       { status: 502 },
     );
   }
@@ -615,9 +634,9 @@ export async function action({ request }: ActionFunctionArgs) {
     ok: true,
     sent: recipients.length,
     product_id: productNumericId,
-    product_url: productUrl,
     shopIdRaw: shopId,
     shopIdNormalized: normalizedShopId,
+    ocResponse: ocJson,
   });
 }
 
