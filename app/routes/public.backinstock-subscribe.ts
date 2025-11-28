@@ -32,37 +32,37 @@ const ORIGIN_TO_ENV: Record<string, ShopEnvConfig> = {
   },
 
   // NZ
-  "https://bloomconnectnz.myshopify.com": {
+  "https://bloomconnect.co.nz": {
     domainEnv: "SHOP_42102259871_DOMAIN",
     tokenEnv: "SHOP_42102259871_ADMIN_TOKEN",
   },
 
   // AU
-  "https://bloomconnect.myshopify.com": {
+  "https://bloomconnect.com.au": {
     domainEnv: "SHOP_35012608137_DOMAIN",
     tokenEnv: "SHOP_35012608137_ADMIN_TOKEN",
   },
 
   // SG
-  "https://bloom-connect-sg.myshopify.com": {
+  "https://bloomconnect.com.sg": {
     domainEnv: "SHOP_44068798624_DOMAIN",
     tokenEnv: "SHOP_44068798624_ADMIN_TOKEN",
   },
 
   // HK
-  "https://bloomconnecthk.myshopify.com": {
+  "https://bloomconnect.com.hk": {
     domainEnv: "SHOP_49541087392_DOMAIN",
     tokenEnv: "SHOP_49541087392_ADMIN_TOKEN",
   },
 
   // MY
-  "https://bloomconnectmy.myshopify.com": {
+  "https://bloomconnect.com.my": {
     domainEnv: "SHOP_48475504790_DOMAIN",
     tokenEnv: "SHOP_48475504790_ADMIN_TOKEN",
   },
 
   // ID
-  "https://bloomconnectid.myshopify.com": {
+  "https://bloomconnect.co.id": {
     domainEnv: "SHOP_46777794714_DOMAIN",
     tokenEnv: "SHOP_46777794714_ADMIN_TOKEN",
   },
