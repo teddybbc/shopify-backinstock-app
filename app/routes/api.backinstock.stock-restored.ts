@@ -40,11 +40,11 @@ const SHOP_CONFIGS: Record<
     tokenEnv: "SHOP_44068798624_ADMIN_TOKEN",
     shopBaseUrl: "bloomconnect.com.sg",
   },
-  // HK
+  // HK  👈 removed stray leading slash
   "49541087392": {
     domainEnv: "SHOP_49541087392_DOMAIN",
     tokenEnv: "SHOP_49541087392_ADMIN_TOKEN",
-    shopBaseUrl: "/bloomconnect.com.hk",
+    shopBaseUrl: "bloomconnect.com.hk",
   },
   // MY
   "48475504790": {
@@ -74,9 +74,9 @@ const SHOP_CONFIGS: Record<
 
 type ShopAdminConfig = {
   shopId: string;
-  shopDomain: string;       // myshopify domain from env
+  shopDomain: string; // myshopify domain from env
   adminAccessToken: string;
-  shopBaseUrl: string;      // public storefront base URL (bloomconnect.com.xx)
+  shopBaseUrl: string; // public storefront base URL (bloomconnect.com.xx)
 };
 
 function getShopAdminConfig(shopId: string): ShopAdminConfig {
@@ -482,15 +482,19 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
-  // 9) Build payload for Laravel (formerly OpenCart)
+  // 9) Build payload for Laravel
   const handle = variantNode.product?.handle ?? "";
 
-  // Use public storefront base URL (e.g. https://bloomconnect.com.au)
-  const baseUrl = shopCfg.shopBaseUrl; // strip trailing slashes
+  // Normalize shopBaseUrl → strip protocol, leading/trailing slashes
+  const baseHost = shopCfg.shopBaseUrl
+    .trim()
+    .replace(/^https?:\/\//, "")
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
 
   const productUrl = handle
-    ? `https://${baseUrl}/products/${handle}`
-    : `https://${baseUrl}/products/${productNumericId}`;
+    ? `https://${baseHost}/products/${handle}`
+    : `https://${baseHost}/products/${productNumericId}`;
 
   const ocPayload = {
     product_id: productNumericId,
@@ -503,7 +507,6 @@ export async function action({ request }: ActionFunctionArgs) {
 
   console.log("Backinstock Flow: posting payload to Laravel:", ocPayload);
 
-  // Laravel endpoint (replaces old OpenCart URL)
   const ocUrl =
     "https://sellerapp.bloomandgrowgroup.com/api/backinstock/sendemail";
 
@@ -512,7 +515,7 @@ export async function action({ request }: ActionFunctionArgs) {
     flowSecretHeader, // For secret validation on the Laravel side
   };
 
-  console.log("Backinstock Flow: posting payload to Laravel:", payloadToOC);
+  console.log("Backinstock Flow: posting to Laravel payload:", payloadToOC);
 
   let ocJson: any = null;
 
@@ -533,12 +536,6 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     console.log("Laravel backinstock response:", ocJson);
-
-    if (ocJson?.secret_valid === true) {
-      console.log("Backinstock Flow: Laravel SECRET OK");
-    } else {
-      console.log("Backinstock Flow: Laravel SECRET INVALID (or not present)");
-    }
 
     if (!ocResp.ok) {
       return json(
@@ -618,9 +615,9 @@ export async function action({ request }: ActionFunctionArgs) {
     ok: true,
     sent: recipients.length,
     product_id: productNumericId,
+    product_url: productUrl,
     shopIdRaw: shopId,
     shopIdNormalized: normalizedShopId,
-    ocResponse: ocJson,
   });
 }
 
