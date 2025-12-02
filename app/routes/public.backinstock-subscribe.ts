@@ -56,7 +56,7 @@ const ORIGIN_TO_ENV: Record<string, ShopEnvConfig> = {
   },
 
   // MY
-  "https://bloomconnect.com.my": {
+  "https://bloomconnectmy.myshopify.com": {
     domainEnv: "SHOP_48475504790_DOMAIN",
     tokenEnv: "SHOP_48475504790_ADMIN_TOKEN",
   },
