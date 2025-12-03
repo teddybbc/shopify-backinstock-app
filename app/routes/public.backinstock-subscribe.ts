@@ -5,6 +5,10 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 // CORS + SHOP CONFIG
 // ==============================
 
+// Shared secret for Laravel validation hardcoded
+const FLOW_SECRET_HEADER = "fss_jeu39ej3032kd03k30dk303kd00293003";
+
+
 type ShopEnvConfig = {
   domainEnv: string;
   tokenEnv: string;
@@ -271,9 +275,54 @@ export async function action({ request }: ActionFunctionArgs) {
       }
     }
 
-    if (!companies.includes(companyId)) {
+        if (!companies.includes(companyId)) {
       companies.push(companyId);
+
+      // Post companyId + variantIdRaw to Laravel to save subscription
+      try {
+        const subscriptionPayload = {
+          company_id: companyId,
+          variant_id: variantIdRaw,     // numeric ID from Liquid
+          flowSecretHeader: FLOW_SECRET_HEADER,
+        };
+
+        const saveResp = await fetch(
+          "https://sellerapp.bloomandgrowgroup.com/api/backinstock/saveSubscription",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(subscriptionPayload),
+          },
+        );
+
+        const saveText = await saveResp.text();
+        let saveJson: any;
+
+        try {
+          saveJson = JSON.parse(saveText);
+        } catch {
+          saveJson = { raw: saveText };
+        }
+
+        if (!saveResp.ok || saveJson?.ok === false) {
+          console.error(
+            "Backinstock subscribe: Laravel saveSubscription failed",
+            {
+              status: saveResp.status,
+              body: saveJson,
+            },
+          );
+        }
+      } catch (err) {
+        console.error(
+          "Backinstock subscribe: error calling saveSubscription endpoint",
+          err,
+        );
+      }
     }
+
 
     const newValue = JSON.stringify(companies);
 
