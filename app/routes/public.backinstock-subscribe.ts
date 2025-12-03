@@ -276,52 +276,52 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
         if (!companies.includes(companyId)) {
-      companies.push(companyId);
+          companies.push(companyId);
 
-      // Post companyId + variantIdRaw to Laravel to save subscription
-      try {
-        const subscriptionPayload = {
-          company_id: companyId,
-          variant_id: variantIdRaw,     // numeric ID from Liquid
-          flowSecretHeader: FLOW_SECRET_HEADER,
-        };
+          // Post companyId + variantIdRaw to Laravel to save subscription
+          try {
+            const subscriptionPayload = {
+              company_id: companyId,
+              variant_id: variantIdRaw,     // numeric ID from Liquid
+              flowSecretHeader: FLOW_SECRET_HEADER,
+            };
 
-        const saveResp = await fetch(
-          "https://sellerapp.bloomandgrowgroup.com/api/backinstock/saveSubscription",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(subscriptionPayload),
-          },
-        );
+            const saveResp = await fetch(
+              "https://sellerapp.bloomandgrowgroup.com/api/backinstock/saveSubscription",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(subscriptionPayload),
+              },
+            );
 
-        const saveText = await saveResp.text();
-        let saveJson: any;
+            const saveText = await saveResp.text();
+            let saveJson: any;
 
-        try {
-          saveJson = JSON.parse(saveText);
-        } catch {
-          saveJson = { raw: saveText };
+            try {
+              saveJson = JSON.parse(saveText);
+            } catch {
+              saveJson = { raw: saveText };
+            }
+
+            if (!saveResp.ok || saveJson?.ok === false) {
+              console.error(
+                "Backinstock subscribe: Laravel saveSubscription failed",
+                {
+                  status: saveResp.status,
+                  body: saveJson,
+                },
+              );
+            }
+          } catch (err) {
+            console.error(
+              "Backinstock subscribe: error calling saveSubscription endpoint",
+              err,
+            );
+          }
         }
-
-        if (!saveResp.ok || saveJson?.ok === false) {
-          console.error(
-            "Backinstock subscribe: Laravel saveSubscription failed",
-            {
-              status: saveResp.status,
-              body: saveJson,
-            },
-          );
-        }
-      } catch (err) {
-        console.error(
-          "Backinstock subscribe: error calling saveSubscription endpoint",
-          err,
-        );
-      }
-    }
 
 
     const newValue = JSON.stringify(companies);
