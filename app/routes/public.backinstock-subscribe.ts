@@ -284,6 +284,7 @@ export async function action({ request }: ActionFunctionArgs) {
               company_id: companyId,
               variant_id: variantIdRaw,     // numeric ID from Liquid
               flowSecretHeader: FLOW_SECRET_HEADER,
+               website: origin,
             };
 
             const saveResp = await fetch(
