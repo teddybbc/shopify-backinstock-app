@@ -268,14 +268,14 @@ export default function BackinstockIndex() {
   });
 
   return (
-    <Page title="Back in stock history" fullWidth>
+    <Page title="Subscriptions" fullWidth>
       <Layout>
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
+              {/* <Text as="h2" variant="headingMd">
                 Back in stock history
-              </Text>
+              </Text> */}
 
               <TextField
                 label="Search history"
