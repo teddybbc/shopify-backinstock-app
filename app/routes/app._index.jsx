@@ -62,9 +62,7 @@ export async function loader({ request }) {
           }
         }
       `,
-      {
-        variables: { cursor },
-      },
+      { variables: { cursor } },
     );
 
     const data = await response.json();
@@ -115,8 +113,8 @@ export async function loader({ request }) {
       companies.forEach((id) => companyIdSet.add(id));
 
       subscriptions.push({
-        variantId: variant.id,
-        productId: productNumericId,
+        variantId: variant.id, // GID
+        productId: productNumericId, // numeric
         productTitle: product.title,
         variantTitle: variant.title,
         sku: variant.sku || "",
@@ -143,9 +141,7 @@ export async function loader({ request }) {
           }
         }
       `,
-      {
-        variables: { ids: nodeIds },
-      },
+      { variables: { ids: nodeIds } },
     );
 
     const companyData = await companyResp.json();
@@ -154,9 +150,7 @@ export async function loader({ request }) {
     companyMap = nodes.reduce((acc, node) => {
       if (!node || !node.id) return acc;
       const numeric = node.id.split("/").pop();
-      acc[numeric] = {
-        name: node.name,
-      };
+      acc[numeric] = { name: node.name };
       return acc;
     }, {});
   }
@@ -164,28 +158,53 @@ export async function loader({ request }) {
   // ----- 4) Derive shop handle for admin URLs -----
   const shopHandle = session.shop.replace(".myshopify.com", "");
 
-  return json({ subscriptions, shop: shopHandle, companyMap });
+  // ----- 5) Fetch backinstock history from Laravel -----
+  // IMPORTANT: Your requirement says payload shop_id is numeric like "59668267140".
+  // If you already have a numeric shop ID elsewhere, replace this logic with that source.
+  // Here we fall back to using the shop handle as shop_id (you can replace it).
+  const shopNumericId = shopHandle; // <-- replace with true numeric shop_id if needed
+
+  let backinstockHistory = [];
+  try {
+    const historyResp = await fetch(
+      "https://sellerapp.bloomandgrowgroup.com/api/backinstock/getSavedSubscriptions",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shop_id: shopNumericId,
+          flowSecretHeader: "fss_jeu39ej3032kd03k30dk303kd00293003",
+        }),
+      },
+    );
+
+    const historyJson = await historyResp.json();
+    backinstockHistory = historyJson?.ok ? historyJson.data : [];
+  } catch (e) {
+    backinstockHistory = [];
+  }
+
+  return json({ subscriptions, shop: shopHandle, companyMap, backinstockHistory });
 }
 
 // =================== REACT PAGE ===================
 
 export default function BackinstockIndex() {
-  const { subscriptions, shop, companyMap } = useLoaderData();
+  const { subscriptions, shop, companyMap, backinstockHistory } = useLoaderData();
 
-  // --- Search state ---
+  // =======================
+  // Subscriptions table state
+  // =======================
   const [search, setSearch] = useState("");
   const normalizedQuery = search.trim().toLowerCase();
 
-  // --- Pagination state ---
   const ITEMS_PER_PAGE = 20;
-  const [page, setPage] = useState(1); // 1-based
+  const [page, setPage] = useState(1);
 
-  // Reset to first page when search changes
   useEffect(() => {
     setPage(1);
   }, [normalizedQuery]);
 
-  // Precompute enhanced subscriptions with label + company names
   const enhancedSubscriptions = useMemo(() => {
     return subscriptions.map((sub) => {
       const variantPart =
@@ -200,24 +219,15 @@ export default function BackinstockIndex() {
         return info?.name || id;
       });
 
-      return {
-        ...sub,
-        label,
-        companyNames,
-      };
+      return { ...sub, label, companyNames };
     });
   }, [subscriptions, companyMap]);
 
-  // Filter by search (product label, sku, company names)
   const filteredSubscriptions = useMemo(() => {
     if (!normalizedQuery) return enhancedSubscriptions;
 
     return enhancedSubscriptions.filter((sub) => {
-      const haystack = [
-        sub.label,
-        sub.sku,
-        ...(sub.companyNames || []),
-      ]
+      const haystack = [sub.label, sub.sku, ...(sub.companyNames || [])]
         .join(" ")
         .toLowerCase();
 
@@ -225,7 +235,6 @@ export default function BackinstockIndex() {
     });
   }, [enhancedSubscriptions, normalizedQuery]);
 
-  // Pagination calculations
   const totalItems = filteredSubscriptions.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
   const currentPage = Math.min(page, totalPages);
@@ -234,7 +243,6 @@ export default function BackinstockIndex() {
 
   const pageSubscriptions = filteredSubscriptions.slice(startIndex, endIndex);
 
-  // Build rows for DataTable
   const rows = pageSubscriptions.map((sub) => {
     const productUrl = `https://admin.shopify.com/store/${shop}/products/${sub.productId}`;
 
@@ -263,13 +271,90 @@ export default function BackinstockIndex() {
     return [productCell, sub.sku || "—", companiesCell];
   });
 
+  // =======================
+  // History table state
+  // =======================
+  const [historySearch, setHistorySearch] = useState("");
+  const HISTORY_PER_PAGE = 15;
+  const [historyPage, setHistoryPage] = useState(1);
+
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [historySearch]);
+
+  // Build a fast lookup by numeric variant ID => subscription info (product + sku)
+  const variantMap = useMemo(() => {
+    const map = {};
+    subscriptions.forEach((sub) => {
+      const numericVariantId = sub.variantId.split("/").pop();
+      map[numericVariantId] = sub;
+    });
+    return map;
+  }, [subscriptions]);
+
+  const filteredHistory = useMemo(() => {
+    const q = historySearch.trim().toLowerCase();
+    if (!q) return backinstockHistory;
+
+    return backinstockHistory.filter((row) => {
+      const variant = variantMap[row.variant_id];
+      const companyName = companyMap[row.company_id]?.name || "";
+
+      return (
+        (variant?.productTitle || "").toLowerCase().includes(q) ||
+        (variant?.sku || "").toLowerCase().includes(q) ||
+        companyName.toLowerCase().includes(q)
+      );
+    });
+  }, [historySearch, backinstockHistory, variantMap, companyMap]);
+
+  const totalHistory = filteredHistory.length;
+  const historyPages = Math.max(1, Math.ceil(totalHistory / HISTORY_PER_PAGE));
+  const currentHistoryPage = Math.min(historyPage, historyPages);
+  const historyStart = (currentHistoryPage - 1) * HISTORY_PER_PAGE;
+  const historyEnd = Math.min(historyStart + HISTORY_PER_PAGE, totalHistory);
+
+  const pageHistory = filteredHistory.slice(historyStart, historyEnd);
+
+  const historyRows = pageHistory
+    .map((row) => {
+      const variant = variantMap[row.variant_id];
+      if (!variant) return null;
+
+      const productUrl = `https://admin.shopify.com/store/${shop}/products/${variant.productId}`;
+      const companyUrl = `https://admin.shopify.com/store/${shop}/companies/${row.company_id}?selectedView=all`;
+
+      const dt = new Date(row.created_at);
+      const dateLabel = dt.toLocaleString("en-AU", {
+        day: "2-digit",
+        month: "short",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+
+      return [
+        <PolarisLink url={productUrl} target="_blank">
+          {variant.productTitle}
+        </PolarisLink>,
+        <PolarisLink url={companyUrl} target="_blank">
+          {companyMap[row.company_id]?.name || row.company_id}
+        </PolarisLink>,
+        variant.sku || "—",
+        dateLabel,
+      ];
+    })
+    .filter(Boolean);
+
   return (
     <Page title="Back in stock subscriptions" fullWidth>
       <Layout>
+        {/* =======================
+            Subscriptions table
+        ======================= */}
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
-              {/* Search input */}
               <TextField
                 label="Search subscriptions"
                 labelHidden
@@ -298,19 +383,70 @@ export default function BackinstockIndex() {
                   <Box paddingBlockStart="200">
                     <InlineStack align="space-between">
                       <Text as="span" variant="bodySm">
-                        Showing {startIndex + 1}–{endIndex} of {totalItems}{" "}
-                        subscriptions
+                        Showing {startIndex + 1}–{endIndex} of {totalItems} subscriptions
                       </Text>
                       <Pagination
                         hasPrevious={currentPage > 1}
-                        onPrevious={() =>
-                          setPage((prev) => Math.max(1, prev - 1))
-                        }
+                        onPrevious={() => setPage((prev) => Math.max(1, prev - 1))}
                         hasNext={currentPage < totalPages}
+                        onNext={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                      />
+                    </InlineStack>
+                  </Box>
+                </>
+              )}
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        {/* =======================
+            Back in stock history table
+        ======================= */}
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">
+                Back in stock history
+              </Text>
+
+              <TextField
+                label="Search history"
+                labelHidden
+                value={historySearch}
+                onChange={setHistorySearch}
+                placeholder="Search by product, SKU, or company"
+                autoComplete="off"
+                clearButton
+                onClearButtonClick={() => setHistorySearch("")}
+              />
+
+              {historyRows.length === 0 ? (
+                <Text as="p" variant="bodyMd">
+                  {totalHistory === 0 && !historySearch.trim()
+                    ? "No history found yet."
+                    : "No history matches your search."}
+                </Text>
+              ) : (
+                <>
+                  <DataTable
+                    columnContentTypes={["text", "text", "text", "text"]}
+                    headings={["Product Name", "Company Name", "Sku", "Date"]}
+                    rows={historyRows}
+                  />
+
+                  <Box paddingBlockStart="200">
+                    <InlineStack align="space-between">
+                      <Text as="span" variant="bodySm">
+                        Showing {historyStart + 1}–{historyEnd} of {totalHistory} records
+                      </Text>
+                      <Pagination
+                        hasPrevious={currentHistoryPage > 1}
+                        onPrevious={() =>
+                          setHistoryPage((p) => Math.max(1, p - 1))
+                        }
+                        hasNext={currentHistoryPage < historyPages}
                         onNext={() =>
-                          setPage((prev) =>
-                            Math.min(totalPages, prev + 1),
-                          )
+                          setHistoryPage((p) => Math.min(historyPages, p + 1))
                         }
                       />
                     </InlineStack>
