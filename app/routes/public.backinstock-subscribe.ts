@@ -8,7 +8,6 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 // Shared secret for Laravel validation hardcoded
 const FLOW_SECRET_HEADER = "fss_jeu39ej3032kd03k30dk303kd00293003";
 
-
 type ShopEnvConfig = {
   domainEnv: string;
   tokenEnv: string;
@@ -83,9 +82,7 @@ const ALLOWED_ORIGINS = Object.keys(ORIGIN_TO_ENV);
 
 function corsHeaders(origin: string | null) {
   const allowedOrigin =
-    origin && ALLOWED_ORIGINS.includes(origin)
-      ? origin
-      : ALLOWED_ORIGINS[0]; // default to first known origin
+    origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]; // default to first known origin
 
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
@@ -127,11 +124,7 @@ function getShopConfigFromOrigin(origin: string | null): ShopAdminConfig {
 // Admin GraphQL helper
 // ==============================
 
-async function adminGraphql(
-  shopCfg: ShopAdminConfig,
-  query: string,
-  variables: any,
-) {
+async function adminGraphql(shopCfg: ShopAdminConfig, query: string, variables: any) {
   const ADMIN_API_VERSION = "2025-07";
   const url = `https://${shopCfg.shopDomain}/admin/api/${ADMIN_API_VERSION}/graphql.json`;
 
@@ -154,14 +147,8 @@ async function adminGraphql(
   }
 
   if (!resp.ok) {
-    console.error(
-      "Admin GraphQL HTTP error",
-      resp.status,
-      JSON.stringify(json, null, 2),
-    );
-    throw new Error(
-      `Admin GraphQL HTTP ${resp.status}: ${JSON.stringify(json)}`,
-    );
+    console.error("Admin GraphQL HTTP error", resp.status, JSON.stringify(json, null, 2));
+    throw new Error(`Admin GraphQL HTTP ${resp.status}: ${JSON.stringify(json)}`);
   }
 
   if (json.errors) {
@@ -169,6 +156,26 @@ async function adminGraphql(
   }
 
   return json;
+}
+
+/**
+ * Fetch shop.id (GID) so we can send it to Laravel:
+ * Example: gid://shopify/Shop/49541087392
+ */
+async function getShopId(shopCfg: ShopAdminConfig): Promise<string> {
+  const json = await adminGraphql(
+    shopCfg,
+    `
+      query GetShopId {
+        shop {
+          id
+        }
+      }
+    `,
+    {},
+  );
+
+  return json?.data?.shop?.id || "";
 }
 
 // ==============================
@@ -185,16 +192,10 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (request.method !== "POST") {
-    return new Response(
-      JSON.stringify({ ok: false, error: "Method not allowed" }),
-      {
-        status: 405,
-        headers: {
-          ...baseHeaders,
-          "Content-Type": "application/json",
-        },
-      },
-    );
+    return new Response(JSON.stringify({ ok: false, error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...baseHeaders, "Content-Type": "application/json" },
+    });
   }
 
   const formData = await request.formData();
@@ -203,17 +204,8 @@ export async function action({ request }: ActionFunctionArgs) {
 
   if (!variantIdRaw || !companyId) {
     return new Response(
-      JSON.stringify({
-        ok: false,
-        error: "Missing variant_id or company_id",
-      }),
-      {
-        status: 400,
-        headers: {
-          ...baseHeaders,
-          "Content-Type": "application/json",
-        },
-      },
+      JSON.stringify({ ok: false, error: "Missing variant_id or company_id" }),
+      { status: 400, headers: { ...baseHeaders, "Content-Type": "application/json" } },
     );
   }
 
@@ -226,21 +218,15 @@ export async function action({ request }: ActionFunctionArgs) {
   } catch (err: any) {
     console.error("Backinstock subscribe: config error", err);
     return new Response(
-      JSON.stringify({
-        ok: false,
-        error: "Server misconfigured or origin not allowed",
-      }),
-      {
-        status: 500,
-        headers: {
-          ...baseHeaders,
-          "Content-Type": "application/json",
-        },
-      },
+      JSON.stringify({ ok: false, error: "Server misconfigured or origin not allowed" }),
+      { status: 500, headers: { ...baseHeaders, "Content-Type": "application/json" } },
     );
   }
 
   try {
+    // ✅ Fetch shop.id once (GID)
+    const shopId = await getShopId(shopCfg);
+
     // 1) Read the existing metafield
     const readJson = await adminGraphql(
       shopCfg,
@@ -257,8 +243,7 @@ export async function action({ request }: ActionFunctionArgs) {
       { id: variantGid },
     );
 
-    const mfValue =
-      readJson?.data?.productVariant?.metafield?.value ?? null;
+    const mfValue = readJson?.data?.productVariant?.metafield?.value ?? null;
 
     let companies: string[] = [];
     if (mfValue) {
@@ -268,62 +253,52 @@ export async function action({ request }: ActionFunctionArgs) {
           companies = parsed.filter((c) => typeof c === "string");
         }
       } catch (err) {
-        console.error(
-          "Backinstock subscribe: failed to parse existing metafield JSON",
-          err,
-        );
+        console.error("Backinstock subscribe: failed to parse existing metafield JSON", err);
       }
     }
 
-        if (!companies.includes(companyId)) {
-          companies.push(companyId);
+    // Only save to metafield + Laravel if it is a NEW subscription
+    if (!companies.includes(companyId)) {
+      companies.push(companyId);
 
-          // Post companyId + variantIdRaw to Laravel to save subscription
-          try {
-            const subscriptionPayload = {
-              company_id: companyId,
-              variant_id: variantIdRaw,     // numeric ID from Liquid
-              flowSecretHeader: FLOW_SECRET_HEADER,
-               website: origin,
-            };
+      // Post companyId + variantIdRaw + origin website + shopId to Laravel
+      try {
+        const subscriptionPayload = {
+          company_id: companyId,
+          variant_id: variantIdRaw, // numeric ID from Liquid
+          flowSecretHeader: FLOW_SECRET_HEADER,
+          website: origin, // e.g. https://bloomconnect.com.hk
+          shop_id: shopId, // e.g. gid://shopify/Shop/49541087392
+        };
 
-            const saveResp = await fetch(
-              "https://sellerapp.bloomandgrowgroup.com/api/backinstock/saveSubscription",
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify(subscriptionPayload),
-              },
-            );
+        const saveResp = await fetch(
+          "https://sellerapp.bloomandgrowgroup.com/api/backinstock/saveSubscription",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(subscriptionPayload),
+          },
+        );
 
-            const saveText = await saveResp.text();
-            let saveJson: any;
+        const saveText = await saveResp.text();
+        let saveJson: any;
 
-            try {
-              saveJson = JSON.parse(saveText);
-            } catch {
-              saveJson = { raw: saveText };
-            }
-
-            if (!saveResp.ok || saveJson?.ok === false) {
-              console.error(
-                "Backinstock subscribe: Laravel saveSubscription failed",
-                {
-                  status: saveResp.status,
-                  body: saveJson,
-                },
-              );
-            }
-          } catch (err) {
-            console.error(
-              "Backinstock subscribe: error calling saveSubscription endpoint",
-              err,
-            );
-          }
+        try {
+          saveJson = JSON.parse(saveText);
+        } catch {
+          saveJson = { raw: saveText };
         }
 
+        if (!saveResp.ok || saveJson?.ok === false) {
+          console.error("Backinstock subscribe: Laravel saveSubscription failed", {
+            status: saveResp.status,
+            body: saveJson,
+          });
+        }
+      } catch (err) {
+        console.error("Backinstock subscribe: error calling saveSubscription endpoint", err);
+      }
+    }
 
     const newValue = JSON.stringify(companies);
 
@@ -359,27 +334,13 @@ export async function action({ request }: ActionFunctionArgs) {
       },
     );
 
-    const userErrors =
-      writeJson?.data?.metafieldsSet?.userErrors ?? [];
+    const userErrors = writeJson?.data?.metafieldsSet?.userErrors ?? [];
 
     if (userErrors.length > 0) {
-      console.error(
-        "Backinstock subscribe: metafieldsSet userErrors",
-        userErrors,
-      );
+      console.error("Backinstock subscribe: metafieldsSet userErrors", userErrors);
       return new Response(
-        JSON.stringify({
-          ok: false,
-          error: "Failed to save subscription",
-          userErrors,
-        }),
-        {
-          status: 500,
-          headers: {
-            ...baseHeaders,
-            "Content-Type": "application/json",
-          },
-        },
+        JSON.stringify({ ok: false, error: "Failed to save subscription", userErrors }),
+        { status: 500, headers: { ...baseHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -391,41 +352,21 @@ export async function action({ request }: ActionFunctionArgs) {
         variantId: variantGid,
         companies,
       }),
-      {
-        status: 200,
-        headers: {
-          ...baseHeaders,
-          "Content-Type": "application/json",
-        },
-      },
+      { status: 200, headers: { ...baseHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
     console.error("Backinstock subscribe: unexpected error", err);
-    return new Response(
-      JSON.stringify({ ok: false, error: "Internal error" }),
-      {
-        status: 500,
-        headers: {
-          ...baseHeaders,
-          "Content-Type": "application/json",
-        },
-      },
-    );
+    return new Response(JSON.stringify({ ok: false, error: "Internal error" }), {
+      status: 500,
+      headers: { ...baseHeaders, "Content-Type": "application/json" },
+    });
   }
 }
 
 // Optional GET handler: quick health check for this route
 export function loader({}: LoaderFunctionArgs) {
-  return new Response(
-    JSON.stringify({
-      status: "ok",
-      route: "public/backinstock-subscribe",
-    }),
-    {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-      },
-    },
-  );
+  return new Response(JSON.stringify({ status: "ok", route: "public/backinstock-subscribe" }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
 }
