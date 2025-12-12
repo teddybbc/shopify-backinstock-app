@@ -264,7 +264,7 @@ export default function BackinstockIndex() {
       </PolarisLink>
     );
 
-    return [productCell, companyCell, sku, dateLabel];
+    return [productCell, sku, companyCell, dateLabel];
   });
 
   return (
@@ -298,7 +298,7 @@ export default function BackinstockIndex() {
                 <>
                   <DataTable
                     columnContentTypes={["text", "text", "text", "text"]}
-                    headings={["Product Name", "Company Name", "Sku", "Date"]}
+                    headings={["Product Name", "Sku", "Company Name", "Date"]}
                     rows={rows}
                   />
 
