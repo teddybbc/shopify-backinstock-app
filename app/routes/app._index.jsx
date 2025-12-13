@@ -274,18 +274,22 @@ export default function BackinstockIndex() {
     const isNotified = !isEmptyRestockAt(row.restock_at);
     const rowStyle = isNotified ? { color: "#aaaaaa" } : undefined;
 
-    const productCell = productUrl ? (
-      <PolarisLink url={productUrl} target="_blank" style={rowStyle}>
+    const productCell = isNotified ? (
+      <PolarisLink url={productUrl} target="_blank" style={{color:"#aaaaaa"}} monochrome >
         {productTitle}
       </PolarisLink>
     ) : (
-      <Text as="span" style={rowStyle}>
+      <PolarisLink url={productUrl} target="_blank" style={rowStyle}>
         {productTitle}
-      </Text>
+      </PolarisLink>
     );
 
-    const companyCell = (
-      <PolarisLink url={companyUrl} target="_blank" style={rowStyle}>
+    const companyCell = isNotified ?  (
+      <PolarisLink url={companyUrl} target="_blank" style={{color:"#aaaaaa"}} monochrome >
+        {companyName}
+      </PolarisLink>
+    ):(
+       <PolarisLink url={companyUrl} target="_blank" style={rowStyle}>
         {companyName}
       </PolarisLink>
     );
