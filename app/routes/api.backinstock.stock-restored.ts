@@ -18,10 +18,7 @@ import {
 const ADMIN_API_VERSION = "2025-07";
 
 // Map numeric shopId -> env keys (domain + admin token)
-const SHOP_CONFIGS: Record<
-  string,
-  { domainEnv: string; tokenEnv: string }
-> = {
+const SHOP_CONFIGS: Record<string, { domainEnv: string; tokenEnv: string }> = {
   // NZ
   "42102259871": {
     domainEnv: "SHOP_42102259871_DOMAIN",
@@ -64,8 +61,6 @@ const SHOP_CONFIGS: Record<
   },
 };
 
-
-
 type ShopAdminConfig = {
   shopId: string;
   shopDomain: string;
@@ -84,12 +79,7 @@ function getShopAdminConfig(shopId: string): ShopAdminConfig {
   const shopDomain = process.env[cfg.domainEnv];
   const adminAccessToken = process.env[cfg.tokenEnv];
 
-  console.log(
-    "getShopAdminConfig: domainEnv:",
-    cfg.domainEnv,
-    "isSet:",
-    !!shopDomain,
-  );
+  console.log("getShopAdminConfig: domainEnv:", cfg.domainEnv, "isSet:", !!shopDomain);
   console.log(
     "getShopAdminConfig: tokenEnv:",
     cfg.tokenEnv,
@@ -113,11 +103,7 @@ function getShopAdminConfig(shopId: string): ShopAdminConfig {
 /**
  * Simple Admin GraphQL call using fetch + offline token
  */
-async function adminGraphql(
-  shopCfg: ShopAdminConfig,
-  query: string,
-  variables: any,
-) {
+async function adminGraphql(shopCfg: ShopAdminConfig, query: string, variables: any) {
   const url = `https://${shopCfg.shopDomain}/admin/api/${ADMIN_API_VERSION}/graphql.json`;
 
   const resp = await fetch(url, {
@@ -146,14 +132,8 @@ async function adminGraphql(
   }
 
   if (!resp.ok) {
-    console.error(
-      "Admin GraphQL HTTP error",
-      resp.status,
-      JSON.stringify(jsonObj, null, 2),
-    );
-    throw new Error(
-      `Admin GraphQL HTTP ${resp.status}: ${JSON.stringify(jsonObj)}`,
-    );
+    console.error("Admin GraphQL HTTP error", resp.status, JSON.stringify(jsonObj, null, 2));
+    throw new Error(`Admin GraphQL HTTP ${resp.status}: ${JSON.stringify(jsonObj)}`);
   }
 
   if (jsonObj.errors) {
@@ -186,8 +166,7 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  let { shopId, variantId, inventoryQuantity, previousInventoryQuantity } =
-    body ?? {};
+  let { shopId, variantId, inventoryQuantity, previousInventoryQuantity } = body ?? {};
 
   console.log("Backinstock Flow raw payload:", body);
 
@@ -197,10 +176,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // Normalize shopId: GID ("gid://shopify/Shop/666...") -> "666..."
   let normalizedShopId: string;
-  if (
-    typeof shopId === "string" &&
-    shopId.startsWith("gid://shopify/Shop/")
-  ) {
+  if (typeof shopId === "string" && shopId.startsWith("gid://shopify/Shop/")) {
     normalizedShopId = shopId.split("/").pop() || shopId;
   } else {
     normalizedShopId = String(shopId);
@@ -213,15 +189,11 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ ok: false, error: "Missing variantId" }, { status: 400 });
   }
 
-  if (
-    typeof inventoryQuantity !== "number" ||
-    typeof previousInventoryQuantity !== "number"
-  ) {
+  if (typeof inventoryQuantity !== "number" || typeof previousInventoryQuantity !== "number") {
     return json(
       {
         ok: false,
-        error:
-          "inventoryQuantity and previousInventoryQuantity must be numbers",
+        error: "inventoryQuantity and previousInventoryQuantity must be numbers",
       },
       { status: 400 },
     );
@@ -229,9 +201,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // 3) Only fire when inventory crosses from <= 0 to > 0
   if (!(inventoryQuantity > 0 && previousInventoryQuantity <= 0)) {
-    console.log(
-      "Backinstock Flow: inventory did not cross from <= 0 to > 0. Skipping.",
-    );
+    console.log("Backinstock Flow: inventory did not cross from <= 0 to > 0. Skipping.");
     return json({
       ok: true,
       skipped: true,
@@ -262,7 +232,7 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
-  // 5) Load variant + metafield
+  // 5) Load variant + metafield (+ product first image)
   let variantNode: any;
   try {
     const variantDataJson = await adminGraphql(
@@ -278,6 +248,16 @@ export async function action({ request }: ActionFunctionArgs) {
               id
               title
               handle
+              featuredImage {
+                url
+              }
+              images(first: 1) {
+                edges {
+                  node {
+                    url
+                  }
+                }
+              }
             }
             metafield(namespace: "backinstock", key: "notify_companies") {
               value
@@ -290,10 +270,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     variantNode = variantDataJson?.data?.productVariant;
   } catch (err: any) {
-    console.error(
-      "Backinstock Flow: error loading variant via Admin API:",
-      err,
-    );
+    console.error("Backinstock Flow: error loading variant via Admin API:", err);
 
     return json(
       {
@@ -310,6 +287,15 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ ok: false, error: "Variant not found" }, { status: 404 });
   }
 
+  // ✅ NEW (2): compute first product image url
+  const productFeaturedUrl: string =
+    variantNode?.product?.featuredImage?.url ?? "";
+
+  const productImagesFirstUrl: string =
+    variantNode?.product?.images?.edges?.[0]?.node?.url ?? "";
+
+  const productImageUrl: string = productFeaturedUrl || productImagesFirstUrl || "";
+
   // 6) Extract company IDs from metafield JSON
   let companyIds: string[] = [];
   const rawCompanies = variantNode.metafield?.value;
@@ -321,10 +307,7 @@ export async function action({ request }: ActionFunctionArgs) {
         companyIds = parsed.filter((c) => typeof c === "string");
       }
     } catch (err) {
-      console.error(
-        "Backinstock Flow: error parsing notify_companies metafield",
-        err,
-      );
+      console.error("Backinstock Flow: error parsing notify_companies metafield", err);
     }
   }
 
@@ -393,16 +376,9 @@ export async function action({ request }: ActionFunctionArgs) {
         const mc = companyNode.mainContact;
 
         let email: string | undefined =
-          mc?.customer?.defaultEmailAddress?.emailAddress ||
-          mc?.customer?.email ||
-          mc?.email;
+          mc?.customer?.defaultEmailAddress?.emailAddress || mc?.customer?.email || mc?.email;
 
-        console.log(
-          "Backinstock Flow: derived email for company",
-          companyId,
-          "=>",
-          email,
-        );
+        console.log("Backinstock Flow: derived email for company", companyId, "=>", email);
 
         if (!email) {
           console.warn(
@@ -418,11 +394,7 @@ export async function action({ request }: ActionFunctionArgs) {
           email,
         });
       } catch (err) {
-        console.error(
-          "Backinstock Flow: error loading company",
-          companyId,
-          err,
-        );
+        console.error("Backinstock Flow: error loading company", companyId, err);
       }
     }),
   );
@@ -454,10 +426,7 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (!productNumericId) {
-    console.error(
-      "Backinstock Flow: could not derive numeric product_id from",
-      productGid,
-    );
+    console.error("Backinstock Flow: could not derive numeric product_id from", productGid);
     return json(
       { ok: false, error: "Could not derive product_id from product GID" },
       { status: 500 },
@@ -471,19 +440,24 @@ export async function action({ request }: ActionFunctionArgs) {
     : `https://${shopCfg.shopDomain}/products/${productNumericId}`;
 
   const ocPayload = {
+    // existing
     product_id: productNumericId,
     product_title: variantNode.product?.title ?? "",
     variant_title: variantNode.displayName ?? "",
     sku: variantNode.sku ?? "",
     product_url: productUrl,
     subscribers: recipients.map((r) => r.email),
+
+    // ✅ NEW (1): numeric shop id
+    shop_id: normalizedShopId,
+
+    // ✅ NEW (2): first product image url
+    product_image_url: productImageUrl,
   };
 
   console.log("Backinstock Flow: posting payload to OpenCart:", ocPayload);
 
-  //const ocUrl ="https://dreampim.com/index.php?route=cronjob/backinstock/sendEmail";
-
-  const ocUrl ="https://sellerapp.bloomandgrowgroup.com/api/backinstock/sendEmail";
+  const ocUrl = "https://sellerapp.bloomandgrowgroup.com/api/backinstock/sendEmail";
 
   const payloadToOC = {
     ...ocPayload,
@@ -531,10 +505,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   } catch (err) {
     console.error("Backinstock Flow: error calling OpenCart sendEmail:", err);
-    return json(
-      { ok: false, error: "Error calling OpenCart sendEmail" },
-      { status: 502 },
-    );
+    return json({ ok: false, error: "Error calling OpenCart sendEmail" }, { status: 502 });
   }
 
   // 10) Clear notify_companies metafield (JSON type) after successful emails
@@ -575,20 +546,14 @@ export async function action({ request }: ActionFunctionArgs) {
       JSON.stringify(clearMetaJson, null, 2),
     );
 
-    const userErrors =
-      clearMetaJson?.data?.metafieldsSet?.userErrors ?? [];
+    const userErrors = clearMetaJson?.data?.metafieldsSet?.userErrors ?? [];
     if (userErrors.length > 0) {
       console.error("Backinstock Flow: metafield clear errors:", userErrors);
     } else {
-      console.log(
-        "Backinstock Flow: notify_companies metafield cleared successfully.",
-      );
+      console.log("Backinstock Flow: notify_companies metafield cleared successfully.");
     }
   } catch (err) {
-    console.error(
-      "Backinstock Flow: failed to clear notify_companies metafield:",
-      err,
-    );
+    console.error("Backinstock Flow: failed to clear notify_companies metafield:", err);
   }
 
   // 11) Final response back to Shopify Flow
