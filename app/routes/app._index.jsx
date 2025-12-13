@@ -15,7 +15,9 @@ import {
   InlineStack,
   Pagination,
   Box,
-  ChoiceList,
+  RadioButton,
+  Select,
+  useBreakpoints,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 
@@ -30,7 +32,7 @@ function chunkArray(arr, size) {
 function formatDateLabel(dateStr) {
   // "10 Oct at 3:19 am"
   const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "Pending";
 
   const day = d.toLocaleString("en-AU", { day: "2-digit" });
   const month = d.toLocaleString("en-AU", { month: "short" });
@@ -199,30 +201,30 @@ export async function loader({ request }) {
 // =================== REACT PAGE ===================
 
 export default function BackinstockIndex() {
-  const { shop, backinstockHistory, variantInfoMap, companyMap } =
-    useLoaderData();
+  const { shop, backinstockHistory, variantInfoMap, companyMap } = useLoaderData();
+
+  const { smUp } = useBreakpoints(); // smUp=false on small/mobile
 
   // Search + Filter + Pagination
   const [historySearch, setHistorySearch] = useState("");
-  const [historyStatus, setHistoryStatus] = useState(["all"]); // ChoiceList expects array
+  const [historyStatus, setHistoryStatus] = useState("all"); // "all" | "pending" | "sent"
   const [historyPage, setHistoryPage] = useState(1);
   const HISTORY_PER_PAGE = 15;
 
   const normalizedHistoryQuery = historySearch.trim().toLowerCase();
-  const selectedStatus = historyStatus?.[0] || "all";
 
   useEffect(() => {
     setHistoryPage(1);
-  }, [normalizedHistoryQuery, selectedStatus]);
+  }, [normalizedHistoryQuery, historyStatus]);
 
-  // Combined filter (radio) + search
+  // Combined filter (radio/select) + search
   const filteredHistory = useMemo(() => {
     let base = backinstockHistory || [];
 
     // 1) Status filter
-    if (selectedStatus === "pending") {
+    if (historyStatus === "pending") {
       base = base.filter((row) => isEmptyRestockAt(row.restock_at));
-    } else if (selectedStatus === "sent") {
+    } else if (historyStatus === "sent") {
       base = base.filter((row) => !isEmptyRestockAt(row.restock_at));
     }
 
@@ -238,13 +240,7 @@ export default function BackinstockIndex() {
       const haystack = `${productTitle} ${companyName} ${sku}`;
       return haystack.includes(normalizedHistoryQuery);
     });
-  }, [
-    backinstockHistory,
-    normalizedHistoryQuery,
-    selectedStatus,
-    variantInfoMap,
-    companyMap,
-  ]);
+  }, [backinstockHistory, normalizedHistoryQuery, historyStatus, variantInfoMap, companyMap]);
 
   // Pagination
   const totalHistory = filteredHistory.length;
@@ -292,12 +288,12 @@ export default function BackinstockIndex() {
   });
 
   const emptyMessage = (() => {
-    if (totalHistory === 0 && !normalizedHistoryQuery && selectedStatus === "all")
+    if (totalHistory === 0 && !normalizedHistoryQuery && historyStatus === "all")
       return "No history found yet.";
 
     if (totalHistory === 0) {
-      if (selectedStatus === "pending") return "No pending notifications match your search.";
-      if (selectedStatus === "sent") return "No sent notifications match your search.";
+      if (historyStatus === "pending") return "No pending notifications match your search.";
+      if (historyStatus === "sent") return "No sent notifications match your search.";
       return "No history matches your search.";
     }
 
@@ -311,9 +307,9 @@ export default function BackinstockIndex() {
           <Card>
             <BlockStack gap="400">
               {/* Search + Filter row */}
-              <InlineStack align="space-between" gap="400">
-                {/* Left 50% */}
-                <Box width="50%">
+              <InlineStack align="space-between" gap="400" wrap={false}>
+                {/* Left 49% */}
+                <Box width="49%">
                   <TextField
                     label="Search history"
                     labelHidden
@@ -326,21 +322,47 @@ export default function BackinstockIndex() {
                   />
                 </Box>
 
-                {/* Right 50% */}
-                <Box width="50%">
-                  <InlineStack align="end">
-                    <ChoiceList
-                      title="Filter"
-                      titleHidden
-                      choices={[
+                {/* Right 49% */}
+                <Box width="49%">
+                  {smUp ? (
+                    // Desktop/Tablet: horizontal radios
+                    <InlineStack align="end" gap="400" wrap={false}>
+                      <RadioButton
+                        label="All"
+                        checked={historyStatus === "all"}
+                        name="historyStatus"
+                        id="historyStatusAll"
+                        onChange={() => setHistoryStatus("all")}
+                      />
+                      <RadioButton
+                        label="Pending Notification"
+                        checked={historyStatus === "pending"}
+                        name="historyStatus"
+                        id="historyStatusPending"
+                        onChange={() => setHistoryStatus("pending")}
+                      />
+                      <RadioButton
+                        label="Notification Sent"
+                        checked={historyStatus === "sent"}
+                        name="historyStatus"
+                        id="historyStatusSent"
+                        onChange={() => setHistoryStatus("sent")}
+                      />
+                    </InlineStack>
+                  ) : (
+                    // Mobile: select dropdown
+                    <Select
+                      label="Filter"
+                      labelHidden
+                      value={historyStatus}
+                      onChange={setHistoryStatus}
+                      options={[
                         { label: "All", value: "all" },
                         { label: "Pending Notification", value: "pending" },
                         { label: "Notification Sent", value: "sent" },
                       ]}
-                      selected={historyStatus}
-                      onChange={(value) => setHistoryStatus(value)}
                     />
-                  </InlineStack>
+                  )}
                 </Box>
               </InlineStack>
 
@@ -357,7 +379,7 @@ export default function BackinstockIndex() {
                       "Sku",
                       "Company Name",
                       "Subscribe Date",
-                      "Sent Notification",
+                      "Notify Date",
                     ]}
                     rows={rows}
                   />
@@ -370,13 +392,9 @@ export default function BackinstockIndex() {
 
                       <Pagination
                         hasPrevious={currentPage > 1}
-                        onPrevious={() =>
-                          setHistoryPage((p) => Math.max(1, p - 1))
-                        }
+                        onPrevious={() => setHistoryPage((p) => Math.max(1, p - 1))}
                         hasNext={currentPage < totalPages}
-                        onNext={() =>
-                          setHistoryPage((p) => Math.min(totalPages, p + 1))
-                        }
+                        onNext={() => setHistoryPage((p) => Math.min(totalPages, p + 1))}
                       />
                     </InlineStack>
                   </Box>
