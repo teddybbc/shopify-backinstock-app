@@ -378,8 +378,8 @@ export default function BackinstockIndex() {
                       "Product Name",
                       "Sku",
                       "Company Name",
-                      "Subscribe Date",
-                      "Notify Date",
+                      "Subscription Date",
+                      "Notification Date",
                     ]}
                     rows={rows}
                   />
