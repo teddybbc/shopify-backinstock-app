@@ -270,21 +270,31 @@ export default function BackinstockIndex() {
     const dateLabel = row.created_at ? formatDateLabel(row.created_at) : "—";
     const dateRestock = row.restock_at ? formatDateLabel(row.restock_at) : "Pending";
 
+    // ✅ If restock_at is NOT empty, grey out the whole row content
+    const isNotified = !isEmptyRestockAt(row.restock_at);
+    const rowStyle = isNotified ? { color: "#aaaaaa" } : undefined;
+
     const productCell = productUrl ? (
-      <PolarisLink url={productUrl} target="_blank">
+      <PolarisLink url={productUrl} target="_blank" style={rowStyle}>
         {productTitle}
       </PolarisLink>
     ) : (
-      <Text as="span">{productTitle}</Text>
+      <Text as="span" style={rowStyle}>
+        {productTitle}
+      </Text>
     );
 
     const companyCell = (
-      <PolarisLink url={companyUrl} target="_blank">
+      <PolarisLink url={companyUrl} target="_blank" style={rowStyle}>
         {companyName}
       </PolarisLink>
     );
 
-    return [productCell, sku, companyCell, dateLabel, dateRestock];
+    const skuCell = <span style={rowStyle}>{sku}</span>;
+    const createdCell = <span style={rowStyle}>{dateLabel}</span>;
+    const restockCell = <span style={rowStyle}>{dateRestock}</span>;
+
+    return [productCell, skuCell, companyCell, createdCell, restockCell];
   });
 
   const emptyMessage = (() => {
