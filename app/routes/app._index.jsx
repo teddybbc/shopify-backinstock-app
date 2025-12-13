@@ -275,7 +275,7 @@ export default function BackinstockIndex() {
     const rowStyle = isNotified ? { color: "#aaaaaa" } : undefined;
 
     const productCell = productUrl ? (
-      <PolarisLink url={productUrl} target="_blank" style={rowStyle}>
+      <PolarisLink url={productUrl} target="_blank" monochrome style={rowStyle}>
         {productTitle}
       </PolarisLink>
     ) : (
@@ -285,7 +285,7 @@ export default function BackinstockIndex() {
     );
 
     const companyCell = (
-      <PolarisLink url={companyUrl} target="_blank" style={rowStyle}>
+      <PolarisLink url={companyUrl} target="_blank" monochrome style={rowStyle}>
         {companyName}
       </PolarisLink>
     );
