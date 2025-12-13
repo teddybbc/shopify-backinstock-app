@@ -287,6 +287,11 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ ok: false, error: "Variant not found" }, { status: 404 });
   }
 
+  // variant exist
+  const variantNumericId =
+  typeof variantId === "string" ? variantId.split("/").pop() || "" : "";
+
+
   // ✅ NEW (2): compute first product image url
   const productFeaturedUrl: string =
     variantNode?.product?.featuredImage?.url ?? "";
@@ -453,6 +458,9 @@ export async function action({ request }: ActionFunctionArgs) {
 
     // ✅ NEW (2): first product image url
     product_image_url: productImageUrl,
+
+    // ✅ NEW: include variant_id (numeric)
+    variant_id: variantNumericId,
   };
 
   console.log("Backinstock Flow: posting payload to OpenCart:", ocPayload);
