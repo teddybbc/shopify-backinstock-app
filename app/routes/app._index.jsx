@@ -32,7 +32,7 @@ function chunkArray(arr, size) {
 function formatDateLabel(dateStr) {
   // "10 Oct at 3:19 am"
   const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return "Pending";
+  if (Number.isNaN(d.getTime())) return "-";
 
   const day = d.toLocaleString("en-AU", { day: "2-digit" });
   const month = d.toLocaleString("en-AU", { month: "short" });
@@ -268,7 +268,7 @@ export default function BackinstockIndex() {
     const companyUrl = `https://admin.shopify.com/store/${shop}/companies/${row.company_id}?selectedView=all`;
 
     const dateLabel = row.created_at ? formatDateLabel(row.created_at) : "—";
-    const dateRestock = row.restock_at ? formatDateLabel(row.restock_at) : "—";
+    const dateRestock = row.restock_at ? formatDateLabel(row.restock_at) : "Pending";
 
     const productCell = productUrl ? (
       <PolarisLink url={productUrl} target="_blank">
