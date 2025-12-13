@@ -91,6 +91,7 @@ export async function loader({ request }) {
     company_id: String(r.company_id ?? ""),
     variant_id: String(r.variant_id ?? ""),
     created_at: r.created_at ?? null,
+    restock_at: r.restock_at ?? null,
   }));
 
   // 3) Bulk lookup variant + company info from Shopify (FAST, no product paging)
@@ -249,6 +250,7 @@ export default function BackinstockIndex() {
     const companyUrl = `https://admin.shopify.com/store/${shop}/companies/${row.company_id}?selectedView=all`;
 
     const dateLabel = row.created_at ? formatDateLabel(row.created_at) : "—";
+    const dateRestock = row.restock_at ? formatDateLabel(row.restock_at) : "—";
 
     const productCell = productUrl ? (
       <PolarisLink url={productUrl} target="_blank">
@@ -264,7 +266,7 @@ export default function BackinstockIndex() {
       </PolarisLink>
     );
 
-    return [productCell, sku, companyCell, dateLabel];
+    return [productCell, sku, companyCell, dateLabel, dateRestock];
   });
 
   return (
@@ -298,7 +300,7 @@ export default function BackinstockIndex() {
                 <>
                   <DataTable
                     columnContentTypes={["text", "text", "text", "text"]}
-                    headings={["Product Name", "Sku", "Company Name", "Date"]}
+                    headings={["Product Name", "Sku", "Company Name", "Subscribe Date", "Notify Date"]}
                     rows={rows}
                   />
 
