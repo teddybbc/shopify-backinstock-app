@@ -15,6 +15,7 @@ import {
   InlineStack,
   Pagination,
   Box,
+  ChoiceList,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 
@@ -43,6 +44,10 @@ function formatDateLabel(dateStr) {
     .replace(" PM", " pm");
 
   return `${day} ${month} at ${time}`;
+}
+
+function isEmptyRestockAt(restock_at) {
+  return restock_at === null || restock_at === undefined || String(restock_at).trim() === "";
 }
 
 // =================== LOADER ===================
@@ -105,10 +110,9 @@ export async function loader({ request }) {
 
   // Maps for UI
   const variantInfoMap = {}; // variant_numeric_id -> { productTitle, sku, productNumericId }
-  const companyMap = {};     // company_numeric_id -> { name }
+  const companyMap = {}; // company_numeric_id -> { name }
 
   // ---- 3a) Lookup variants via nodes() in chunks
-  // Shopify nodes() can take many IDs but keep chunk safe.
   const variantChunks = chunkArray(
     variantIdsNumeric.map((id) => `gid://shopify/ProductVariant/${id}`),
     100,
@@ -198,22 +202,34 @@ export default function BackinstockIndex() {
   const { shop, backinstockHistory, variantInfoMap, companyMap } =
     useLoaderData();
 
-  // Only one table now: "Back in stock history"
+  // Search + Filter + Pagination
   const [historySearch, setHistorySearch] = useState("");
+  const [historyStatus, setHistoryStatus] = useState(["all"]); // ChoiceList expects array
   const [historyPage, setHistoryPage] = useState(1);
   const HISTORY_PER_PAGE = 15;
 
   const normalizedHistoryQuery = historySearch.trim().toLowerCase();
+  const selectedStatus = historyStatus?.[0] || "all";
 
   useEffect(() => {
     setHistoryPage(1);
-  }, [normalizedHistoryQuery]);
+  }, [normalizedHistoryQuery, selectedStatus]);
 
-  // Filter
+  // Combined filter (radio) + search
   const filteredHistory = useMemo(() => {
-    if (!normalizedHistoryQuery) return backinstockHistory;
+    let base = backinstockHistory || [];
 
-    return backinstockHistory.filter((row) => {
+    // 1) Status filter
+    if (selectedStatus === "pending") {
+      base = base.filter((row) => isEmptyRestockAt(row.restock_at));
+    } else if (selectedStatus === "sent") {
+      base = base.filter((row) => !isEmptyRestockAt(row.restock_at));
+    }
+
+    // 2) Search filter
+    if (!normalizedHistoryQuery) return base;
+
+    return base.filter((row) => {
       const v = variantInfoMap[row.variant_id];
       const productTitle = (v?.productTitle || "").toLowerCase();
       const sku = (v?.sku || "").toLowerCase();
@@ -222,7 +238,13 @@ export default function BackinstockIndex() {
       const haystack = `${productTitle} ${companyName} ${sku}`;
       return haystack.includes(normalizedHistoryQuery);
     });
-  }, [backinstockHistory, normalizedHistoryQuery, variantInfoMap, companyMap]);
+  }, [
+    backinstockHistory,
+    normalizedHistoryQuery,
+    selectedStatus,
+    variantInfoMap,
+    companyMap,
+  ]);
 
   // Pagination
   const totalHistory = filteredHistory.length;
@@ -269,38 +291,74 @@ export default function BackinstockIndex() {
     return [productCell, sku, companyCell, dateLabel, dateRestock];
   });
 
+  const emptyMessage = (() => {
+    if (totalHistory === 0 && !normalizedHistoryQuery && selectedStatus === "all")
+      return "No history found yet.";
+
+    if (totalHistory === 0) {
+      if (selectedStatus === "pending") return "No pending notifications match your search.";
+      if (selectedStatus === "sent") return "No sent notifications match your search.";
+      return "No history matches your search.";
+    }
+
+    return "No history matches your search.";
+  })();
+
   return (
     <Page title="Subscriptions" fullWidth>
       <Layout>
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
-              {/* <Text as="h2" variant="headingMd">
-                Back in stock history
-              </Text> */}
+              {/* Search + Filter row */}
+              <InlineStack align="space-between" gap="400">
+                {/* Left 50% */}
+                <Box width="50%">
+                  <TextField
+                    label="Search history"
+                    labelHidden
+                    value={historySearch}
+                    onChange={setHistorySearch}
+                    placeholder="Search by product, sku, or company"
+                    autoComplete="off"
+                    clearButton
+                    onClearButtonClick={() => setHistorySearch("")}
+                  />
+                </Box>
 
-              <TextField
-                label="Search history"
-                labelHidden
-                value={historySearch}
-                onChange={setHistorySearch}
-                placeholder="Search by product, SKU, or company"
-                autoComplete="off"
-                clearButton
-                onClearButtonClick={() => setHistorySearch("")}
-              />
+                {/* Right 50% */}
+                <Box width="50%">
+                  <InlineStack align="end">
+                    <ChoiceList
+                      title="Filter"
+                      titleHidden
+                      choices={[
+                        { label: "All", value: "all" },
+                        { label: "Pending Notification", value: "pending" },
+                        { label: "Notification Sent", value: "sent" },
+                      ]}
+                      selected={historyStatus}
+                      onChange={(value) => setHistoryStatus(value)}
+                    />
+                  </InlineStack>
+                </Box>
+              </InlineStack>
 
               {rows.length === 0 ? (
                 <Text as="p" variant="bodyMd">
-                  {totalHistory === 0 && !normalizedHistoryQuery
-                    ? "No history found yet."
-                    : "No history matches your search."}
+                  {emptyMessage}
                 </Text>
               ) : (
                 <>
                   <DataTable
-                    columnContentTypes={["text", "text", "text", "text"]}
-                    headings={["Product Name", "Sku", "Company Name", "Subscribe Date", "Notify Date"]}
+                    columnContentTypes={["text", "text", "text", "text", "text"]}
+                    headings={[
+                      "Product Name",
+                      "Sku",
+                      "Company Name",
+                      "Subscribe Date",
+                      "Sent Notification",
+                    ]}
                     rows={rows}
                   />
 
